@@ -18,6 +18,7 @@ const axios = require('axios');
 const os = require('os');
 const { exit } = require('process');
 const execSync = require('child_process').execSync;
+const seedrandom = require('seedrandom');
 
 
 
@@ -51,6 +52,7 @@ const execSync = require('child_process').execSync;
 
 let base_gt_path = process.env.LS_DOCKER_GT_DIR
 let server_ls_ss_path = process.env.LS_DOCKER_SERVER_LS_SS_PATH
+let server_ls_json_ss_link_path = process.env.LS_DOCKER_SERVER_LS_JSON_SS_LINK_PATH
 
 let usr = process.env.LS_DOCKER_USR
 let host = process.env.LS_DOCKER_HOST
@@ -62,6 +64,8 @@ let cont_port = process.env.LS_DOCKER_SSH_PORT
 
 let token = (process.env.LS_DOCKER_TOKEN).replaceAll('"', '')
 
+let gt_elem_upload_per = process.env.LS_DOCKER_GT_ELEM_PER
+let gt_seed = process.env.LS_DOCKER_GT_SEED
 let upload_batch_size = process.env.LS_DOCKER_UPLOAD_JSON_BATCH_SIZE
 
 
@@ -156,6 +160,39 @@ function upload_ss (ost, list) {
 
 }
 
+function generateRandomArray(n) {
+  const originalArray = Array.from({ length: n }, (_, index) => index);
+  return originalArray;
+}
+
+function getRandomValuesFromArray(arr, numValuesToChoose) {
+
+  if (numValuesToChoose > arr.length) {
+    throw new Error("Cannot choose more values than the length of the array.");
+  }
+
+  // Create a copy of the original array to avoid modifying it.
+  const shuffledArray = arr.slice();
+
+  // Create a seeded random number generator using seedrandom
+  const rng = seedrandom(gt_seed);
+
+  // Fisher-Yates shuffle to randomize the array.
+  for (let i = shuffledArray.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [shuffledArray[i], shuffledArray[j]] = [shuffledArray[j], shuffledArray[i]];
+  }
+
+  // Return the first numValuesToChoose elements of the shuffled array.
+  return shuffledArray.slice(0, numValuesToChoose);
+
+}
+
+function getSubarrayByIndices(array, indices) {
+  // Use the map function to extract elements based on indices.
+  return indices.map(index => array[index]);
+}
+
 
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -200,7 +237,7 @@ let j_file = fs.readFileSync(base_gt_path + "gt.json")
 let j_list = JSON.parse(j_file)
 
 // Creating list to hold each json object as string
-j_upload_list = []
+let j_upload_list = []
 
 inc = 0
 
@@ -210,8 +247,19 @@ async function mainDriver () {
 
 	for (const obj of j_list) {
 
-		wp_name = obj["data"]["image"].split("/").slice(-1)[0]
-		wp_path = base_gt_path + "gt_imgs/" + wp_name
+		let wp_name = obj["data"]["image"].split("/").slice(-1)[0]
+		let wp_path = base_gt_path + "gt_imgs/" + wp_name
+
+    // Fixing wp img path so that label studios will recognize it
+    let img_path = "/data/local-files/?d=" + server_ls_json_ss_link_path + wp_name
+    obj["data"]["image"] = img_path
+
+    // Only uplo
+    let ann_list = obj["annotations"][0]["result"]
+    let num_elem_upload = Math.floor(gt_elem_upload_per*ann_list.length)
+    let upload_ind_list = getRandomValuesFromArray(generateRandomArray(ann_list.length), num_elem_upload)
+    let ann_list_flt = getSubarrayByIndices(ann_list, upload_ind_list)
+    obj["annotations"][0]["result"] = ann_list_flt 
 
 		// Uploading when inc reaches upload batch size threshold (uses JSON for both in this case) then resetting lists
 		if (inc % upload_batch_size == 0 && inc > 0) {
