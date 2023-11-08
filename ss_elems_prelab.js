@@ -155,6 +155,8 @@ async function get_ss_elements (uri, st, full_path_out, index_num) {
       })
     // const browser = await puppeteer.launch({headless:headless_})
     const page = await browser.newPage()
+    await (await browser.pages())[0].close(); //close first one, to overcome the bug in stealth library mentioned in
+    //https://github.com/berstend/puppeteer-extra/issues/88
     
     uniq_uri_id = ""        
 
